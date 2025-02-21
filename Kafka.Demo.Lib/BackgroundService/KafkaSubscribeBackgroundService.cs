@@ -51,61 +51,64 @@ namespace Kafka.Demo.Lib.BackgroundService
             var retryDelay = TimeSpan.FromSeconds(5);
             var consumeTimeout = TimeSpan.FromSeconds(5);
 
-            try
+            await Task.Run(async () =>
             {
-                while (!stoppingToken.IsCancellationRequested)
+                try
                 {
-                    try
+                    while (!stoppingToken.IsCancellationRequested)
                     {
-                        _logger.LogDebug("Polling Message");
-                        var consumeResult = _consumer.Consume(consumeTimeout);
-                        if (consumeResult == null) continue;
-                        _logger.LogDebug("Committing Message");
-                        _consumer.Commit(consumeResult);
-
-                        _logger.LogDebug("Waiting Semaphore");
-                        await _semaphore.WaitAsync(stoppingToken);
-
-                        _ = Task.Run(async () =>
+                        try
                         {
-                            try
+                            _logger.LogDebug("Polling Message");
+                            var consumeResult = _consumer.Consume(consumeTimeout);
+                            if (consumeResult == null) continue;
+                            _logger.LogDebug("Committing Message");
+                            _consumer.Commit(consumeResult);
+
+                            _logger.LogDebug("Waiting Semaphore");
+                            await _semaphore.WaitAsync(stoppingToken);
+
+                            _ = Task.Run(async () =>
                             {
-                                _logger.LogDebug(
-                                    $"Processing Message {consumeResult.Message.Key} {consumeResult.Message.Value} {consumeResult.Message.Headers}");
-                                await HandleAsync(consumeResult);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Error handling message");
-                                if (_messageHandleExceptionHandler != null)
-                                    await _messageHandleExceptionHandler.HandleAsync(ex, consumeResult, _groupName);
-                                if (_errorQueueMessageHandleExceptionHandler != null)
-                                    await _errorQueueMessageHandleExceptionHandler.HandleAsync(ex, consumeResult,
-                                        _groupName);
-                            }
-                            finally
-                            {
-                                _logger.LogDebug("Releasing Semaphore");
-                                _semaphore.Release();
-                            }
-                        }, stoppingToken);
-                    }
-                    catch (ConsumeException ex)
-                    {
-                        _logger.LogError(ex, "Consume Exception");
-                        await Task.Delay(retryDelay, stoppingToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Unexpected Exception in Consume Loop");
-                        await Task.Delay(retryDelay, stoppingToken);
+                                try
+                                {
+                                    _logger.LogDebug(
+                                        $"Processing Message {consumeResult.Message.Key} {consumeResult.Message.Value} {consumeResult.Message.Headers}");
+                                    await HandleAsync(consumeResult);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Error handling message");
+                                    if (_messageHandleExceptionHandler != null)
+                                        await _messageHandleExceptionHandler.HandleAsync(ex, consumeResult, _groupName);
+                                    if (_errorQueueMessageHandleExceptionHandler != null)
+                                        await _errorQueueMessageHandleExceptionHandler.HandleAsync(ex, consumeResult,
+                                            _groupName);
+                                }
+                                finally
+                                {
+                                    _logger.LogDebug("Releasing Semaphore");
+                                    _semaphore.Release();
+                                }
+                            }, stoppingToken);
+                        }
+                        catch (ConsumeException ex)
+                        {
+                            _logger.LogError(ex, "Consume Exception");
+                            await Task.Delay(retryDelay, stoppingToken);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Unexpected Exception in Consume Loop");
+                            await Task.Delay(retryDelay, stoppingToken);
+                        }
                     }
                 }
-            }
-            finally
-            {
-                _consumer.Close();
-            }
+                finally
+                {
+                    _consumer.Close();
+                }
+            }, stoppingToken);
         }
 
 
