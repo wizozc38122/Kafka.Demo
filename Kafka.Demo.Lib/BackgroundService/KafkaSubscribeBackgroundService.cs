@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
@@ -79,10 +80,18 @@ namespace Kafka.Demo.Lib.BackgroundService
                                 catch (Exception ex)
                                 {
                                     _logger.LogError(ex, "Error handling message");
+                                    var errorMessage = new KafkaErrorMessage
+                                    {
+                                        Topic = consumeResult.Topic,
+                                        Key = consumeResult.Message.Key,
+                                        Value = consumeResult.Message.Value,
+                                        Headers = consumeResult.Message.Headers.ToDictionary(x => x.Key,
+                                            x => consumeResult.GetHeaderValue(x.Key))
+                                    };
                                     if (_messageHandleExceptionHandler != null)
-                                        await _messageHandleExceptionHandler.HandleAsync(ex, consumeResult, _groupName);
+                                        await _messageHandleExceptionHandler.HandleAsync(ex, errorMessage, _groupName);
                                     if (_errorQueueMessageHandleExceptionHandler != null)
-                                        await _errorQueueMessageHandleExceptionHandler.HandleAsync(ex, consumeResult,
+                                        await _errorQueueMessageHandleExceptionHandler.HandleAsync(ex, errorMessage,
                                             _groupName);
                                 }
                                 finally

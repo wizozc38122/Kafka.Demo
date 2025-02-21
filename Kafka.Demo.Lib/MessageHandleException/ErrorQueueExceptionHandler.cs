@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using Confluent.Kafka;
 
@@ -13,7 +14,7 @@ namespace Kafka.Demo.Lib.MessageHandleException
             _bootstrapServers = bootstrapServers;
         }
 
-        public async Task HandleAsync<TKey, TValue>(Exception exception, ConsumeResult<TKey, TValue> consumeResult,
+        public async Task HandleAsync(Exception exception, KafkaErrorMessage errorMessage,
             string groupName)
         {
             var config = new ProducerConfig
@@ -24,13 +25,19 @@ namespace Kafka.Demo.Lib.MessageHandleException
                 AllowAutoCreateTopics = true,
             };
             using (
-                var producer = new ProducerBuilder<TKey, TValue>(config).Build())
+                var producer = new ProducerBuilder<string, string>(config).Build())
             {
-                await producer.ProduceAsync($"{consumeResult.Topic}_{groupName}_Error", new Message<TKey, TValue>
+                var headers = new Headers();
+                foreach (var header in errorMessage.Headers)
                 {
-                    Key = consumeResult.Message.Key,
-                    Value = consumeResult.Message.Value,
-                    Headers = consumeResult.Message.Headers
+                    headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                }
+
+                await producer.ProduceAsync($"{errorMessage.Topic}_{groupName}_Error", new Message<string, string>
+                {
+                    Key = errorMessage.Key,
+                    Value = errorMessage.Value,
+                    Headers = headers
                 });
             }
         }
